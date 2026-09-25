@@ -1,0 +1,25 @@
+:root {
+	--studio-lite-primary: #111111;
+}
+
+.studio-lite-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	text-decoration: none;
+	color: inherit;
+}
+
+.studio-lite-logo {
+	width: 28px;
+	height: 28px;
+	object-fit: contain;
+}
+
+.studio-lite-brand span {
+	font-weight: 600;
+}
+
+.header-logo img {
+	object-fit: contain;
+}
