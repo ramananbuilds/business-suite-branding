@@ -28,7 +28,12 @@
 	};
 
 	function applyBranding() {
-		document.title = BRANDING.product;
+		// Guard: assigning document.title replaces the <title> text node, which is a
+		// childList mutation. Without this check the observer below re-triggers
+		// itself forever and locks the browser main thread (blank page).
+		if (document.title !== BRANDING.product) {
+			document.title = BRANDING.product;
+		}
 
 		if (!window.frappe?.boot) {
 			return;
@@ -64,11 +69,29 @@
 		updateLogo();
 	}
 
+	// Coalesce observer bursts into a single run per animation frame so the
+	// observer can never synchronously re-enter run() as a reaction to its own
+	// DOM write.
+	let scheduled = false;
+
+	function scheduleRun() {
+		if (scheduled) {
+			return;
+		}
+
+		scheduled = true;
+
+		requestAnimationFrame(() => {
+			scheduled = false;
+			run();
+		});
+	}
+
 	run();
 
 	window.addEventListener("load", run);
 
-	const observer = new MutationObserver(run);
+	const observer = new MutationObserver(scheduleRun);
 
 	observer.observe(document.documentElement, {
 		childList: true,
