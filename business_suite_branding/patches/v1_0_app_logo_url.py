@@ -44,11 +44,43 @@ ASSET_URL = f"/assets/{ASSET_PATH}"
 
 # Bump when the asset's contents change, so Cloudflare and the browser both
 # fetch the new file instead of a 4-hour-old cached copy of the previous one.
-VERSION = 2
+VERSION = 3
 VERSIONED_URL = f"{ASSET_URL}?v{VERSION}"
 
-# app -> the line that must be present in its hooks.py
-APPS = ("frappe", "erpnext", "hrms")
+def _patch_app_logo_url(src: str) -> tuple[str, int]:
+	"""Point app_logo_url at the versioned URL, wherever it is declared."""
+	pattern = r'app_logo_url\s*=\s*"' + re.escape(ASSET_URL) + r'(?:\?v\d+)?"'
+	want = f'app_logo_url = "{VERSIONED_URL}"'
+	return re.sub(pattern, want, src), len(re.findall(pattern, src))
+
+
+def _patch_add_to_apps_screen(src: str) -> tuple[str, int]:
+	"""Version the `logo` inside add_to_apps_screen, which is what actually wins.
+
+	frappe/boot.py builds the app switcher like this:
+
+	    app_info = frappe.get_hooks("add_to_apps_screen", app_name=app_name)[0]
+	    app_logo_url = app_info.get("logo") or frappe.get_hooks(
+	        "app_logo_url", app_name=app_name
+	    )
+
+	So `app_logo_url` is only a fallback: whenever add_to_apps_screen carries a
+	logo, that value is what app_data reports and what the switcher renders.
+	frappe/hooks.py was already versioned, which is why the Desk navbar and the
+	frappe entry in the switcher were right while erpnext, hrms and crm stayed
+	stale.
+	"""
+	pattern = r'("logo"\s*:\s*")' + re.escape(ASSET_URL) + r'((?:\?v\d+)?")'
+	return re.sub(pattern, r"\g<1>" + VERSIONED_URL + r"\g<2>", src), len(
+		re.findall(pattern, src)
+	)
+
+
+# every place the asset URL can be declared across the installed apps
+HOOK_PATCHERS = (
+	("app_logo_url", _patch_app_logo_url),
+	("add_to_apps_screen", _patch_add_to_apps_screen),
+)
 
 
 def _app_hooks_py(app: str) -> str | None:
@@ -63,31 +95,46 @@ def _app_hooks_py(app: str) -> str | None:
 def execute():
 	notes = []
 
-	# 1. re-assert app_logo_url in each installed app's hooks.py
-	for app in APPS:
+	# 1. re-assert the versioned asset URL wherever any installed app declares it
+	for app in frappe.get_installed_apps():
 		path = _app_hooks_py(app)
 		if not path:
-			notes.append(f"{app}: not installed, skipped")
 			continue
 
 		with open(path) as f:
 			src = f.read()
 
 		if ASSET_URL not in src:
-			notes.append(f"{app}: hooks.py does not mention the branding asset, skipped")
 			continue
 
-		# normalise any hand-added ?vN so every app agrees on the one version
-		want = f'app_logo_url = "{VERSIONED_URL}"'
-		pattern = r'app_logo_url\s*=\s*"' + re.escape(ASSET_URL) + r'(?:\?v\d+)?"'
-		new = re.sub(pattern, want, src)
+		new = src
+		hits = 0
+		for _label, patcher in HOOK_PATCHERS:
+			new, n = patcher(new)
+			hits += n
 
 		if new == src:
-			notes.append(f"{app}: app_logo_url already {VERSIONED_URL}")
+			notes.append(f"{app}: logo URLs already {VERSIONED_URL}")
 		else:
 			with open(path, "w") as f:
 				f.write(new)
-			notes.append(f"{app}: app_logo_url re-asserted -> {VERSIONED_URL}")
+			notes.append(f"{app}: {hits} logo URL(s) re-asserted -> {VERSIONED_URL}")
+
+	# 1b. make sure no app is left advertising the unversioned asset, by any
+	#     means -- a hook we do not know about would silently keep the old logo
+	stale = []
+	for app in frappe.get_installed_apps():
+		path = _app_hooks_py(app)
+		if not path:
+			continue
+		with open(path) as f:
+			body = f.read()
+		for m in re.finditer(re.escape(ASSET_URL) + r'(?:\?v(\d+))?', body):
+			if not m.group(1):
+				line = body[: m.start()].count("\n") + 1
+				stale.append(f"{app}/hooks.py:{line}")
+	if stale:
+		notes.append(f"WARNING unversioned asset URL still present at: {', '.join(stale)}")
 
 	# 2. make sure the served copy exists and is the prism, not the wordmark
 	#    (a stale volume can still hold the old 160x48 text wordmark)

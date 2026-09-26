@@ -1,17 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 205 380" width="205" height="380" role="img" aria-label="Studio Lite">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="77 16 172 368" width="172" height="368" role="img" aria-label="Studio Lite">
   <title>Studio Lite</title>
-  <!-- Four-facet prism, traced from the source raster.
-       viewBox is cropped to the mark itself (x 60..265 of the 320px source) so
-       there is NO background rectangle: the shape has to sit on the dark
-       navbar button without a black box around it.
-
-       Silhouette:  (77,15.5) -> (248,96) -> (248,383) -> (77,304.7)
-       navy|slate   y = -0.53432x + 276.79
-       slate|teal   y = -0.94208x + 380.44
-       teal|dkteal  y = +1.06331x +  65.60
-       Facet colours are the raster's own dominant pixel values. -->
-  <polygon points="77,15.5 248,96 248,144.3 77,235.6" fill="#051F38"/>
-  <polygon points="77,235.6 248,144.3 248,146.8 77,307.9" fill="#36505D"/>
-  <polygon points="77,307.9 248,146.8 248,329.3" fill="#027C87"/>
-  <polygon points="77,307.9 77,304.7 248,383 248,329.3" fill="#11525B"/>
+  <!-- Traced from the authoritative raster (Downloads/Studio Lite.png).
+       Five measured facets; each polygon is the true boundary contour of
+       that facet's visible region, Douglas-Peucker simplified at 0.7px.
+       No background rectangle, no visible text. -->
+  <polygon points="78.0,230.5 77.5,81.0 76.5,80.0 77.0,16.5 104.0,29.5 106.0,29.5 117.0,35.5 119.0,35.5 132.0,42.5 134.0,42.5 145.0,48.5 147.0,48.5 160.0,55.5 162.0,55.5 173.0,61.5 175.0,61.5 188.0,68.5 190.0,68.5 201.0,74.5 203.0,74.5 216.0,81.5 218.0,81.5 229.0,87.5 231.0,87.5 242.0,93.5 244.0,93.5 245.5,95.0 245.5,147.0 244.0,148.5 78.0,230.5" fill="#051F38"/>
+  <polygon points="130.0,257.5 78.0,233.5 77.5,231.0 207.0,166.5 209.0,166.5 244.0,148.5 245.5,149.0 130.0,257.5" fill="#36505D"/>
+  <polygon points="80.0,304.5 77.5,304.0 78.0,233.5 88.0,238.5 90.0,238.5 105.0,246.5 107.0,246.5 122.0,254.5 124.0,254.5 129.5,258.0 80.0,304.5" fill="#2A3D47"/>
+  <polygon points="248.0,383.5 222.0,370.5 220.0,370.5 209.0,364.5 207.0,364.5 196.0,358.5 194.0,358.5 181.0,351.5 179.0,351.5 168.0,345.5 166.0,345.5 153.0,338.5 151.0,338.5 140.0,332.5 138.0,332.5 127.0,326.5 125.0,326.5 112.0,319.5 110.0,319.5 79.5,305.0 130.0,257.5 139.0,262.5 141.0,262.5 156.0,270.5 158.0,270.5 175.0,279.5 177.0,279.5 192.0,287.5 194.0,287.5 209.0,295.5 211.0,295.5 228.0,304.5 230.0,304.5 247.5,313.0 247.5,348.0 248.5,349.0 248.0,383.5" fill="#11525B"/>
+  <polygon points="247.0,312.5 245.0,312.5 230.0,304.5 228.0,304.5 211.0,295.5 209.0,295.5 194.0,287.5 192.0,287.5 177.0,279.5 175.0,279.5 158.0,270.5 156.0,270.5 130.5,258.0 140.0,247.5 245.0,149.5 246.5,151.0 247.0,312.5" fill="#027C87"/>
 </svg>
