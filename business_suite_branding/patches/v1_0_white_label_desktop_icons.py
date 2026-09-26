@@ -118,14 +118,40 @@ def execute():
 		if not row_name:
 			continue
 
-		# A previous run (or upstream data) may already have a row carrying the
-		# target label. `label` is UNIQUE, so renaming into it raises
-		# IntegrityError 1062 and would fail the whole migrate. That row is a
-		# stale duplicate of this tile, so retire it first.
+		# `label` is UNIQUE. A *different* row may already hold the target label
+		# -- renaming into it raises IntegrityError 1062 and fails the migrate.
+		#
+		# Do NOT delete such a row to make room. In this site a row named
+		# "Frappe CRM" (icon_type=Link, hidden) carried the label
+		# "Studio Lite CRM" while the real CRM launcher tile was a separate row
+		# named "Studio Lite CRM" (icon_type=App, link_to=/crm). Deleting the
+		# label-holder removed the working CRM tile from the launcher. Instead,
+		# move the squatter's label onto its own `name` and keep both rows.
 		clash = frappe.db.exists("Desktop Icon", {"label": new})
 		if clash and clash != row_name:
-			frappe.db.delete("Desktop Icon", clash)
-			notes.append(f"removed stale duplicate tile: {new}")
+			clash_doc = frappe.db.get_value(
+				"Desktop Icon", clash, ["name", "icon_type"], as_dict=True
+			)
+			# Only ever rename a hidden non-App row out of the way.
+			if (
+				clash_doc.icon_type != "App"
+				and frappe.db.get_value("Desktop Icon", clash, "hidden")
+			):
+				frappe.db.set_value(
+					"Desktop Icon", clash, "label", clash_doc.name, update_modified=False
+				)
+				notes.append(f"freed unique label {new!r} held by hidden {clash_doc.name}")
+			else:
+				# A visible or App-type row owns this label: it IS the tile we
+				# want branded, so brand it in place instead of renaming.
+				frappe.db.set_value(
+					"Desktop Icon",
+					clash,
+					{"logo_url": STUDIO_LITE_LOGO},
+					update_modified=False,
+				)
+				notes.append(f"{new}: branded in place (already correct label)")
+				continue
 
 		frappe.db.set_value(
 			"Desktop Icon",
@@ -135,18 +161,23 @@ def execute():
 		)
 		notes.append(f"renamed {old} -> {new} (+logo)")
 
-	# --- pass 3: retarget children at the new parent names ------------------
-	# Children link to their parent by NAME (`autoname = "field:label"`, so the
-	# parent's name moves when it is renamed). Any child still holding an
-	# upstream parent name would dangle and silently vanish from the switcher.
-	for child, stale_parent in CHILDREN.items():
-		row = frappe.db.get_value("Desktop Icon", child, ["parent_icon"], as_dict=True)
-		if not row or not row.parent_icon:
+	# --- pass 3: verify child links still resolve --------------------------
+	# `parent_icon` is a Link to `Desktop Icon`.`name`. The doctype declares
+	# `autoname = "field:label"`, but `name` is the primary key: `db.set_value`
+	# on `label` does NOT rewrite `name`, so the parent's name keeps its
+	# original value ("ERPNext") while the displayed label becomes
+	# "Studio Lite ERP". Children must therefore keep pointing at the ORIGINAL
+	# name -- retargeting them onto the new label would dangle every child link
+	# and silently drop those tiles from the app switcher. Nothing to rewrite;
+	# this pass only reports the linkage so a regression is visible.
+	for old, new in RENAME.items():
+		row = frappe.db.get_value(
+			"Desktop Icon", {"label": new}, ["name", "label"], as_dict=True
+		)
+		if not row:
 			continue
-		new_parent = RENAME.get(row.parent_icon)
-		if new_parent and frappe.db.exists("Desktop Icon", new_parent):
-			frappe.db.set_value("Desktop Icon", child, "parent_icon", new_parent)
-			notes.append(f"{child}: {row.parent_icon} -> {new_parent}")
+		linked = frappe.db.count("Desktop Icon", {"parent_icon": row.name})
+		notes.append(f"{new}: name={row.name}, {linked} child tiles linked")
 
 	# --- cache: renamed icons are cached in Redis -------------------------
 	try:
