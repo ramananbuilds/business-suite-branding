@@ -69,6 +69,10 @@ import frappe
 
 STUDIO_LITE_LOGO = "/assets/business_suite_branding/images/logo.svg"
 
+# The wordmark is used in the header / favicon / page title only. It is
+# deliberately NOT used on launcher tiles: the asset is 160x48, so a tile
+# renders it as a small black bar inside a square. Tiles use lucide icons.
+
 # ---------------------------------------------------------------------------
 # Renames. Keyed by row NAME, which is never changed, so children that point
 # at the name keep working.
@@ -77,7 +81,13 @@ RENAME = {
 	"Frappe HR": "HR",
 	"Framework": "Framework",
 	"ERPNext": "ERPNext",
-	"ERPNext Settings": "ERP Settings",
+	# NOT renamed. A Workspace-Sidebar tile is only permitted into the boot
+	# payload when `workspace_sidebar_item[label.lower()]` exists and has items
+	# (desktop_icon.py). Renaming the tile changes that lookup key, so
+	# "ERP Settings" looks up a sidebar named "erp settings", which does not
+	# exist, and the tile vanishes from the launcher entirely. Only `App` and
+	# `Folder` tiles may be renamed freely.
+	"ERPNext Settings": "ERPNext Settings",
 }
 
 # The CRM launcher tile was created by the branding setup under its own name and
@@ -96,27 +106,41 @@ STALE_PARENT_LABELS = {
 	"ERPNext Settings": ("Studio Lite ERP Settings",),
 }
 
-# The three "application" tiles all get the wordmark.
-APP_TILE_LOGOS = {
-	"Framework": STUDIO_LITE_LOGO,
-	"Frappe HR": STUDIO_LITE_LOGO,
-	"Studio Lite CRM": STUDIO_LITE_LOGO,
-	"ERPNext": None,
-}
-
-# The CRM tile must resolve through the installed `crm` app, not the literal
-# path /crm which 403s. `app` is an Autocomplete (Installed Applications), so
-# it is written as a plain value and never resolved as a Link.
-APP_TILE_APPS = {
-	"Studio Lite CRM": "crm",
-}
-
 # Rows that must stay hidden to reproduce the agreed flat layout.
 KEEP_HIDDEN = ["ERPNext"]
+
+# Workspace-Sidebar tiles whose label MUST keep matching their sidebar name, or
+# the boot filter drops them from the launcher. Repair pass restores these.
+REPAIR_SIDEBAR_LABELS = {
+	"ERPNext Settings": "ERPNext Settings",
+}
 
 
 def execute():
 	notes: list[str] = []
+
+	# --- pass 0: repair a Workspace-Sidebar tile label that was renamed -----
+	# Renaming such a tile removes it from the launcher, because the boot filter
+	# permits it only when workspace_sidebar_item[label.lower()] has items. If
+	# an earlier run renamed "ERPNext Settings" -> "ERP Settings", put the
+	# original label back so the tile returns to the grid.
+	# A sidebar of that name must exist before the label is restored.
+	for name, sidebar_name in REPAIR_SIDEBAR_LABELS.items():
+		row = frappe.db.get_value("Desktop Icon", name, ["label", "link_type"], as_dict=True)
+		if not row or row.link_type != "Workspace Sidebar" or row.label == sidebar_name:
+			continue
+		if not frappe.db.exists("Workspace Sidebar", sidebar_name):
+			notes.append(
+				f"skip label repair on {name!r}: no Workspace Sidebar {sidebar_name!r}"
+			)
+			continue
+		frappe.db.set_value(
+			"Desktop Icon", name, "label", sidebar_name, update_modified=False
+		)
+		notes.append(
+			f"restored label {row.label!r} -> {sidebar_name!r} on {name!r} "
+			f"(a renamed Workspace-Sidebar tile drops out of the launcher)"
+		)
 
 	# --- pass 1a: free labels that hidden module shortcuts are squatting on ---
 	# `label` is UNIQUE. The CRM label we want for the App tile is currently
@@ -212,29 +236,60 @@ def execute():
 		notes.append(f"retargeted children of {name!r} to parent_icon={row.label!r}")
 
 	# --- pass 3: logos ------------------------------------------------------
-	for name, logo in APP_TILE_LOGOS.items():
-		if not frappe.db.exists("Desktop Icon", name):
-			notes.append(f"skip logo: no Desktop Icon named {name!r}")
-			continue
-		frappe.db.set_value("Desktop Icon", name, "logo_url", logo, update_modified=False)
-	notes.append("app tile logos set")
+	# The launcher renders a tile's `logo_url` if set, otherwise it falls back to
+	# the `icon` field (a lucide icon name) coloured by `bg_color`. The app tiles
+	# originally used lucide icons -- Framework rendered a grey cube, HR a green
+	# person, ERPNext Settings a blue gear -- and putting the Studio Lite wordmark in
+	# logo_url replaced all of that with a small black bar, because the wordmark is
+	# a 160x48 wide asset squeezed into a square tile.
+	#
+	# So: clear logo_url on the app tiles and restore their real lucide icons.
+	# `Studio Lite` branding still lives in the header, favicon and page title, which
+	# is where a wordmark belongs.
+	APP_TILE_ICONS = {
+		# name            icon (lucide)     bg_color
+		"Framework": ("box", "gray"),
+		"Frappe HR": ("user-round", "green"),
+		"ERPNext": ("settings", "blue"),
+		"ERPNext Settings": ("settings", "blue"),
+		"Studio Lite CRM": ("users", "blue"),
+	}
 
-	# --- pass 4: make the app tiles actually open ------------------------------
-	# `desktop.js::get_route()` reads the `link` field, not `link_to`:
+	for name, (icon, bg) in APP_TILE_ICONS.items():
+		if not frappe.db.exists("Desktop Icon", name):
+			notes.append(f"skip icon fix: no Desktop Icon named {name!r}")
+			continue
+		frappe.db.set_value(
+			"Desktop Icon",
+			name,
+			{"logo_url": None, "icon": icon, "bg_color": bg},
+			update_modified=False,
+		)
+	notes.append("app tile wordmarks removed; lucide icons restored")
+
+	# --- pass 4: make every app / top-level tile actually open -----------------
+	# `desktop.js::get_route()` reads the `link` field, and for Workspace Sidebar
+	# tiles it looks the sidebar up BY THE TILE'S LABEL:
 	#
 	#     if (link_type == "External" && desktop_icon.link)
 	#         route = window.location.origin + desktop_icon.link;
-	#     else ... link_type == "Workspace Sidebar" ...
+	#     else {
+	#         let sidebar = frappe.boot.workspace_sidebar_item[desktop_icon.label.toLowerCase()];
+	#         if (link_type == "Workspace Sidebar" && sidebar) { ...build route... }
+	#     }
 	#     if (icon_route) set href;  else msgprint("Icon is not correctly configured")
 	#
-	# The CRM tile was created with app='External' and link_to='/crm', but `link`
-	# was left NULL. link_type is 'External', so the first branch fails on the empty
-	# `link`, the Workspace Sidebar branch does not apply, `icon_route` stays
-	# undefined and clicking the tile shows "Icon is not correctly configured".
-	# The other app tiles all carry a `link` (/desk/build, /desk/people, /app/home).
+	# Two distinct failures, both of which this pass repairs:
 	#
-	# Point `link` at the real desk route for each app tile. /desk/people is the
-	# workspace route HRMS registers; /app/crm is the CRM workspace.
+	# 1. The CRM tile was created with app='External' and link_to='/crm', but `link`
+	#    was NULL. The External branch failed on the empty link, the Workspace
+	#    Sidebar branch did not apply, icon_route stayed undefined and clicking the
+	#    tile showed "Icon is not correctly configured". Every other app tile had a
+	#    real link (/desk/build, /desk/people, /app/home).
+	#
+	# 2. Renaming a Workspace-Sidebar tile breaks it twice over: the boot filter
+	#    drops it (label no longer matches a sidebar key) and get_route() cannot find
+	#    the sidebar. This is why pass 0 restores the label instead.
 	APP_TILE_LINKS = {
 		"Framework": "/desk/build",
 		"Frappe HR": "/desk/people",
