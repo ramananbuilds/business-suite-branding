@@ -294,16 +294,21 @@ def execute():
 		notes.append(f"cleared the 160x48 wordmark from {scrubbed} row(s)")
 
 	# --- pass 4: make every app / top-level tile actually open -----------------
-	# `desktop.js::get_route()` reads the `link` field, and for Workspace Sidebar
-	# tiles it looks the sidebar up BY THE TILE'S LABEL:
+	# `desktop.js::get_route()` reads the `link` field, but only for App tiles
+	# whose `link_type` is "External":
 	#
-	#     if (link_type == "External" && desktop_icon.link)
+	#     if (desktop_icon.link_type == "External" && desktop_icon.link)
 	#         route = window.location.origin + desktop_icon.link;
 	#     else {
 	#         let sidebar = frappe.boot.workspace_sidebar_item[desktop_icon.label.toLowerCase()];
-	#         if (link_type == "Workspace Sidebar" && sidebar) { ...build route... }
+	#         if (desktop_icon.link_type == "Workspace Sidebar" && sidebar) { ... }
 	#     }
 	#     if (icon_route) set href;  else msgprint("Icon is not correctly configured")
+	#
+	# If neither branch yields a route the tile is bound to a click handler that
+	# only prints "Icon is not correctly configured". The CRM tile shipped with
+	# app="External" and an EMPTY link, so it fell through both branches. Every
+	# other app tile had a real link (/desk/build, /desk/people, /app/home).
 	#
 	# Two distinct failures, both of which this pass repairs:
 	#
@@ -319,7 +324,12 @@ def execute():
 	APP_TILE_LINKS = {
 		"Framework": "/desk/build",
 		"Frappe HR": "/desk/people",
-		"Studio Lite CRM": "/app/crm",
+		# The real CRM app. crm/hooks.py registers:
+		#     {"from_route": "/crm/<path:app_path>", "to_route": "crm"}
+		# so the Vue SPA is served from /crm (title "Studio Lite CRM", bundles
+		# under assets/crm/frontend/). /app/crm only 301s to /desk/crm, which is
+		# the generic Desk shell and is NOT the CRM app.
+		"Studio Lite CRM": "/crm",
 		"ERPNext": "/app/home",
 	}
 
