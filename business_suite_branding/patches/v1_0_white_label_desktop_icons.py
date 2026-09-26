@@ -1,196 +1,197 @@
-"""White-label the app-selector tiles (Desktop Icon) for Studio Lite.
+"""
+Studio Lite white-label: app-selector (Desktop Icon) titles and logos.
 
-Why a patch and not a direct DB edit
-------------------------------------
-`Desktop Icon` is listed in Frappe's `synced_fixtures`, so a manual
-`UPDATE` is silently reverted by the next `bench migrate`. This patch runs once
-and is a cheap no-op on re-run.
+SCOPE
+-----
+Per the agreed design, ONLY the HR and CRM application tiles are rebranded.
+Everything else keeps its upstream label and its default module icon, so the
+launcher still reads as a product rather than as identical black wordmarks.
 
-What was actually broken
-------------------------
-Runbook section 6 sets `app_title` in each app's hooks, but `app_title` only
-drives the *desk header*. The app switcher tiles are read from the Desktop Icon
-doctype, which still carried upstream labels and logos:
+    Frappe HR      ->  Studio Lite HR      (green person icon retained)
+    Frappe CRM     ->  Studio Lite CRM     (Studio Lite wordmark)
+    Framework      ->  Framework           (unchanged)
+    ERPNext        ->  ERPNext             (unchanged, stays hidden)
 
-    name=ERPNext    label=ERPNext    logo_url=/assets/erpnext/images/erpnext-logo.svg
-    name=Frappe HR  label=Frappe HR  logo_url=/assets/hrms/images/frappe-hr-logo.svg
-    name=Framework  label=Framework  logo_url=/assets/frappe/images/frappe-framework-logo.svg
+THE BUG THIS PATCH PREVENTS
+---------------------------
+`Desktop Icon.parent_icon` is a Link to `Desktop Icon`.`name`, but the desk
+frontend keys its lookup map by `label`:
 
-Ordering matters here
----------------------
-`Desktop Icon` uses `autoname = "field:label"`, so `name` IS the label. Child
-tiles link to their parent through `parent_icon`, which is a Link to
-`Desktop Icon.name`. Renaming a parent therefore orphans every child, and the
-app switcher silently loses those tiles (Assets, Buying, Stock, ...).
+    desktop.js
+        icon_map[icon.label] = icon;                            // keyed by LABEL
+        if (icon.parent_icon && icon_map[icon.parent_icon])       // looked up by NAME
+            icon_map[icon.parent_icon].child_icons.push(icon);
+        if (!icon.parent_icon || !icon_map[icon.parent_icon])
+            this.apps_icons.push(icon);                          // no match -> top level
 
-So the order must be:
+A child therefore renders as a NESTED child only while its parent's `name` and
+`label` are identical. `Desktop Icon` sets `autoname = "field:label"`, so they
+start out equal. Renaming a parent's `label` alone breaks the match: every
+child falls through to `apps_icons` and the grid collapses into a flat wall of
+top-level tiles.
 
-1. repoint every child at the parent's CURRENT name,
-2. rename the parent (which moves `name`),
-3. repoint every child at the parent's NEW name.
+Renaming a parent is thus never safe on its own. This patch renames the parent
+AND retargets every child's `parent_icon` in the same pass, then asserts the
+invariant.
 
-`link_to` and `app` are never touched - they are what a tile navigates to, so
-renaming must not change routing.
+Note the ERPNext parent is intentionally left `hidden = 1`. That is the
+upstream state and it is what produces the agreed layout: Assets, Buying,
+Manufacturing, Projects, Quality, Selling and Stock render as top-level tiles
+because their parent is hidden and therefore absent from `icon_map`.
+
+NEVER DELETE A ROW
+------------------
+`label` is UNIQUE. An earlier revision deleted the row holding a target label
+to free the column, which removed the working CRM launcher tile (row count
+47 -> 46). If a label is already taken, brand its owner in place instead.
 """
 
 import frappe
 
+# row NAME -> desired label. `name` is never changed, so children that already
+# point at the name keep working.
+RENAME = {
+	"Frappe HR": "Studio Lite HR",
+	"Framework": "Framework",
+	"ERPNext": "ERPNext",
+}
+
 STUDIO_LITE_LOGO = "/assets/business_suite_branding/images/logo.svg"
 
-# current (upstream) name -> new branded name
-RENAME = {
-	"ERPNext": "Studio Lite ERP",
-	"Frappe HR": "Studio Lite HR",
-	"Framework": "Studio Lite",
-	"Frappe CRM": "Studio Lite CRM",
+# Only the CRM tile carries the wordmark; the others keep their default icons.
+APP_TILE_LOGOS = {
+	"Framework": None,
+	"ERPNext": None,
+	"Frappe HR": None,
+	"Studio Lite CRM": STUDIO_LITE_LOGO,
 }
 
-# child tile -> the parent it is currently grouped under
-CHILDREN = {
-	# grouped under the ERPNext app tile
-	"Assets": "ERPNext",
-	"Buying": "ERPNext",
-	"CRM": "ERPNext",
-	"ERPNext Settings": "ERPNext",
-	"Manufacturing": "ERPNext",
-	"Projects": "ERPNext",
-	"Quality": "ERPNext",
-	"Selling": "ERPNext",
-	"Stock": "ERPNext",
-	"Support": "ERPNext",
-	# grouped under the Frappe HR app tile (hrms already set these to
-	# "Studio Lite HR" upstream, so they need no retargeting - kept here for
-	# completeness and to survive a re-run against unpatched data)
-	"Expenses": "Frappe HR",
-	"HR Setup": "Frappe HR",
-	"Leaves": "Frappe HR",
-	"Payroll": "Frappe HR",
-	"Performance": "Frappe HR",
-	"Recruitment": "Frappe HR",
-	"Shift & Attendance": "Frappe HR",
-	"Tax & Benefits": "Frappe HR",
-	"Tenure": "Frappe HR",
-	# grouped under the Framework app tile
-	"Automation": "Framework",
-	"Build": "Framework",
-	"Data": "Framework",
-	"Email": "Framework",
-	"Integrations": "Framework",
-	"Printing": "Framework",
-	"System": "Framework",
-	"Users": "Framework",
-	"Website": "Framework",
-}
-
-
-def _repoint_children(from_parent, to_parent):
-	"""Move every child of `from_parent` onto `to_parent`."""
-	moved = []
-	for child in frappe.get_all(
-		"Desktop Icon",
-		filters={"parent_icon": from_parent},
-		fields=["name"],
-		ignore_permissions=True,
-	):
-		frappe.db.set_value("Desktop Icon", child.name, "parent_icon", to_parent)
-		moved.append(child.name)
-	return moved
+# Rows that must stay hidden to reproduce the agreed flat layout.
+KEEP_HIDDEN = ["ERPNext"]
 
 
 def execute():
-	if not frappe.db.exists("DocType", "Desktop Icon"):
-		return
+	notes: list[str] = []
 
-	notes = []
-
-	# --- pass 1: children follow the parent BEFORE it is renamed -----------
-	# Re-point to a temporary-safe state by simply recording them; the real
-	# move happens in pass 3 once the new parent name exists.
-	for parent in RENAME:
-		if frappe.db.exists("Desktop Icon", parent):
-			notes.append(f"parent present: {parent}")
-
-	# --- pass 2: rename the app tiles + swap their logos -------------------
-	for old, new in RENAME.items():
-		row_name = frappe.db.exists("Desktop Icon", {"label": old}) or frappe.db.exists(
-			"Desktop Icon", old
+	# --- pass 1: parent labels ---------------------------------------------
+	for name, new_label in RENAME.items():
+		row = frappe.db.get_value(
+			"Desktop Icon", name, ["name", "label", "icon_type"], as_dict=True
 		)
-		if not row_name:
+		if not row:
+			notes.append(f"skip rename: no Desktop Icon named {name!r}")
+			continue
+		if row.label == new_label:
 			continue
 
-		# `label` is UNIQUE. A *different* row may already hold the target label
-		# -- renaming into it raises IntegrityError 1062 and fails the migrate.
+		# `label` is UNIQUE -- renaming into an occupied label raises
+		# IntegrityError 1062 and fails the entire migrate.
 		#
-		# Do NOT delete such a row to make room. In this site a row named
-		# "Frappe CRM" (icon_type=Link, hidden) carried the label
-		# "Studio Lite CRM" while the real CRM launcher tile was a separate row
-		# named "Studio Lite CRM" (icon_type=App, link_to=/crm). Deleting the
-		# label-holder removed the working CRM tile from the launcher. Instead,
-		# move the squatter's label onto its own `name` and keep both rows.
-		clash = frappe.db.exists("Desktop Icon", {"label": new})
-		if clash and clash != row_name:
-			clash_doc = frappe.db.get_value(
-				"Desktop Icon", clash, ["name", "icon_type"], as_dict=True
+		# Never delete the squatter. Here a hidden Link-type row named
+		# "Frappe CRM" held the label "Studio Lite CRM" while the real CRM
+		# launcher tile was a separate App-type row ALSO named
+		# "Studio Lite CRM". Deleting the holder dropped the working tile.
+		clash = frappe.db.exists("Desktop Icon", {"label": new_label})
+		if clash and clash != row.name:
+			clash_row = frappe.db.get_value(
+				"Desktop Icon", clash, ["name", "icon_type", "hidden"], as_dict=True
 			)
-			# Only ever rename a hidden non-App row out of the way.
-			if (
-				clash_doc.icon_type != "App"
-				and frappe.db.get_value("Desktop Icon", clash, "hidden")
-			):
+			if clash_row.icon_type != "App" and clash_row.hidden:
+				# Hidden, non-App row squatting on the label: move it onto its
+				# own name and keep BOTH rows.
 				frappe.db.set_value(
-					"Desktop Icon", clash, "label", clash_doc.name, update_modified=False
+					"Desktop Icon", clash, "label", clash_row.name, update_modified=False
 				)
-				notes.append(f"freed unique label {new!r} held by hidden {clash_doc.name}")
+				notes.append(f"freed label {new_label!r} from hidden {clash_row.name!r}")
 			else:
 				# A visible or App-type row owns this label: it IS the tile we
-				# want branded, so brand it in place instead of renaming.
+				# want, so brand it in place and skip the rename.
 				frappe.db.set_value(
 					"Desktop Icon",
 					clash,
-					{"logo_url": STUDIO_LITE_LOGO},
+					{"logo_url": APP_TILE_LOGOS.get(clash, STUDIO_LITE_LOGO)},
 					update_modified=False,
 				)
-				notes.append(f"{new}: branded in place (already correct label)")
+				notes.append(f"{new_label!r}: branded existing row {clash!r} in place")
 				continue
 
 		frappe.db.set_value(
-			"Desktop Icon",
-			row_name,
-			{"label": new, "logo_url": STUDIO_LITE_LOGO},
-			update_modified=False,
+			"Desktop Icon", row.name, "label", new_label, update_modified=False
 		)
-		notes.append(f"renamed {old} -> {new} (+logo)")
+		notes.append(f"label {row.label!r} -> {new_label!r} (name {row.name!r} unchanged)")
 
-	# --- pass 3: verify child links still resolve --------------------------
-	# `parent_icon` is a Link to `Desktop Icon`.`name`. The doctype declares
-	# `autoname = "field:label"`, but `name` is the primary key: `db.set_value`
-	# on `label` does NOT rewrite `name`, so the parent's name keeps its
-	# original value ("ERPNext") while the displayed label becomes
-	# "Studio Lite ERP". Children must therefore keep pointing at the ORIGINAL
-	# name -- retargeting them onto the new label would dangle every child link
-	# and silently drop those tiles from the app switcher. Nothing to rewrite;
-	# this pass only reports the linkage so a regression is visible.
-	for old, new in RENAME.items():
-		row = frappe.db.get_value(
-			"Desktop Icon", {"label": new}, ["name", "label"], as_dict=True
-		)
+	# --- pass 2: retarget every child at the label its parent renders under ---
+	# The frontend resolves a child as `icon_map[child.parent_icon]` with the
+	# map keyed by LABEL, so `parent_icon` must equal the parent's label.
+	#
+	# This is also the REPAIR path. `parent_icon` is nominally a Link to
+	# `Desktop Icon`.`name`, but because the frontend matches on LABEL, an
+	# earlier rename of a parent left every child pointing at a label that no
+	# longer exists -- the whole group then renders flat as top-level tiles.
+	# So children are matched on BOTH the parent's current name and any stale
+	# label recorded in PREVIOUS_LABELS, not just the name.
+	STALE_PARENT_LABELS = {
+		# parent name -> labels its children may still be pointing at
+		"Framework": ("Studio Lite",),
+		"Frappe HR": ("Studio Lite HR", "Frappe HR"),
+		"ERPNext": ("Studio Lite ERP", "ERPNext"),
+	}
+	for name in RENAME:
+		row = frappe.db.get_value("Desktop Icon", name, ["name", "label"], as_dict=True)
 		if not row:
 			continue
-		linked = frappe.db.count("Desktop Icon", {"parent_icon": row.name})
-		notes.append(f"{new}: name={row.name}, {linked} child tiles linked")
-
-	# --- cache: renamed icons are cached in Redis -------------------------
-	try:
-		from frappe.desk.doctype.desktop_icon.desktop_icon import (
-			clear_desktop_icons_cache,
+		stale = STALE_PARENT_LABELS.get(name, ())
+		# point every child that references the parent (by name or by a stale
+		# label) at the label the parent actually renders under
+		refs = tuple(dict.fromkeys((row.name, row.label, *stale)))
+		placeholders = ", ".join(["%s"] * len(refs))
+		frappe.db.sql(
+			f"UPDATE `tabDesktop Icon` SET parent_icon = %s WHERE parent_icon IN ({placeholders})",
+			(row.label, *refs),
 		)
+		notes.append(f"retargeted children of {name!r} to parent_icon={row.label!r}")
+
+	# --- pass 3: logos ------------------------------------------------------
+	for name, logo in APP_TILE_LOGOS.items():
+		if not frappe.db.exists("Desktop Icon", name):
+			continue
+		frappe.db.set_value("Desktop Icon", name, "logo_url", logo, update_modified=False)
+	notes.append("app tile logos set")
+
+	# --- pass 4: preserve the agreed hidden state ---------------------------
+	for name in KEEP_HIDDEN:
+		row = frappe.db.get_value("Desktop Icon", name, ["hidden", "label"], as_dict=True)
+		if not row:
+			continue
+		if row.hidden != 1:
+			frappe.db.set_value("Desktop Icon", name, "hidden", 1, update_modified=False)
+			notes.append(f"re-hid {name!r} so its children render top-level")
+
+	# --- pass 5: assert the rendering invariant -----------------------------
+	# Any child whose parent_icon matches no visible label will render flat.
+	# Report it loudly rather than letting the grid silently collapse again.
+	all_icons = frappe.db.sql(
+		"select name, label, parent_icon, hidden from `tabDesktop Icon`", as_dict=True
+	)
+	visible_labels = {i["label"] for i in all_icons if i["hidden"] != 1}
+	orphans = [
+		i["label"]
+		for i in all_icons
+		if i["hidden"] != 1 and i["parent_icon"] and i["parent_icon"] not in visible_labels
+	]
+	notes.append(
+		f"invariant check: {len(orphans)} tiles render top-level by design"
+		if not orphans
+		else f"WARNING: {len(orphans)} tiles would render flat: {sorted(orphans)}"
+	)
+
+	try:
+		from frappe.desk.doctype.desktop_icon.desktop_icon import clear_desktop_icons_cache
 
 		clear_desktop_icons_cache()
-		notes.append("desktop icon cache cleared")
 	except Exception:
 		pass
-
 	frappe.clear_cache(doctype="Desktop Icon")
 
-	if notes:
-		print("white-label desktop icons: " + "; ".join(notes))
+	for note in notes:
+		print(f"white-label desktop icons: {note}")
