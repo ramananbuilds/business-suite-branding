@@ -137,7 +137,15 @@ def write_fixture() -> str:
 		"app": APP,
 		"standard": 1,
 		"items": [
-			{"type": t, "label": lb, "link_to": lt, "is_section_break": sb}
+			{
+				"type": t,
+				"label": lb,
+				"link_to": lt,
+				# see recreate_sidebar() -- a null link_type crashes
+				# desktop.js get_route() and takes the whole grid with it
+				"link_type": "DocType" if t == "Link" else None,
+				"is_section_break": sb,
+			}
 			for (t, lb, lt, sb) in valid_items()
 		],
 	}
@@ -161,7 +169,26 @@ def recreate_sidebar() -> None:
 	for (t, lb, lt, sb) in valid_items():
 		doc.append(
 			"items",
-			{"type": t, "label": lb, "link_to": lt, "is_section_break": sb},
+			{
+				"type": t,
+				"label": lb,
+				"link_to": lt,
+				# link_type MUST be set explicitly. The field is not mandatory
+				# and its default is only applied by the client-side form, so a
+				# row written by a patch lands with link_type = NULL.
+				#
+				# That NULL is fatal: desktop.js get_route() walks
+				#     if      (link_type === "Report")     ...
+				#     else if (link_type === "Workspace") ...
+				#     else if (link_type === "URL")       ...
+				#     else    generate_route({type: null, name: ..., tab: null})
+				# and generate_route() calls .toLowerCase() on the type. The
+				# throw happens while DesktopIconGrid is building, so every tile
+				# after it in the grid is silently dropped -- which is how a
+				# single malformed item cost us the ERP Settings and HR tiles.
+				"link_type": "DocType" if t == "Link" else None,
+				"is_section_break": sb,
+			},
 		)
 	doc.insert(ignore_if_duplicate=True)
 
@@ -187,6 +214,25 @@ def execute():
 		"  orphan check will now resolve "
 		f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)}"
 	)
+
+	# Repair rows left behind by an earlier version of this patch, which wrote
+	# the items without link_type and so left them NULL on disk. This has to run
+	# unconditionally, not inside recreate_sidebar(), because the sidebar already
+	# exists on every site that has already run the patch once.
+	#
+	# A NULL link_type is not cosmetic: desktop.js get_route() falls through to
+	#     generate_route({type: null, name: ..., tab: null})
+	# and generate_route() calls .toLowerCase() on the type. The throw happens
+	# mid-grid-build, so every tile after it is silently dropped.
+	fixed = frappe.db.sql(
+		"""update `tabWorkspace Sidebar Item`
+		   set link_type = 'DocType'
+		   where parent = %s and type = 'Link'
+		     and (link_type is null or link_type = '')""",
+		(SIDEBAR,),
+	)
+	if fixed:
+		notes.append(f"backfilled link_type on {fixed} sidebar item(s)")
 
 	if frappe.db.exists("Workspace Sidebar", SIDEBAR):
 		notes.append(f"sidebar {SIDEBAR!r} already present")

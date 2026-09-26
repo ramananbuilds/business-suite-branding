@@ -25,16 +25,27 @@ It also writes the asset into sites/assets, because that -- not the app tree --
 is what nginx actually serves, and on a brand-new volume the copy is built at
 build time from the branding app's public/ directory.
 
-Note: no cache-busting query string is written here. The ?v2 that appears in
-some of these hooks was a one-off to defeat a stale Cloudflare entry (which had
-Cache-Control: max-age=14400); it is not something to bake into source.
+THE ?v2 QUERY STRING IS LOAD-BEARING, NOT COSMETIC
+--------------------------------------------------
+The asset is served with `Cache-Control: max-age=14400` and Cloudflare honours
+it (`cf-cache-status: HIT`, `Age: 6606` observed). Frappe serves the navbar
+logo by URL, with no build hash, so replacing logo.svg in place leaves every
+cached copy pointing at the OLD 160x48 text wordmark for four hours. The
+version query is what makes a logo change take effect immediately. Bump the
+number in VERSION whenever the asset changes; do not strip it.
 """
 import os
+import re
 
 import frappe
 
 ASSET_PATH = "business_suite_branding/images/logo.svg"
 ASSET_URL = f"/assets/{ASSET_PATH}"
+
+# Bump when the asset's contents change, so Cloudflare and the browser both
+# fetch the new file instead of a 4-hour-old cached copy of the previous one.
+VERSION = 2
+VERSIONED_URL = f"{ASSET_URL}?v{VERSION}"
 
 # app -> the line that must be present in its hooks.py
 APPS = ("frappe", "erpnext", "hrms")
@@ -66,19 +77,17 @@ def execute():
 			notes.append(f"{app}: hooks.py does not mention the branding asset, skipped")
 			continue
 
-		# normalise any hand-added ?vN so the value is identical everywhere
-		import re
-
-		want = f'app_logo_url = "{ASSET_URL}"'
+		# normalise any hand-added ?vN so every app agrees on the one version
+		want = f'app_logo_url = "{VERSIONED_URL}"'
 		pattern = r'app_logo_url\s*=\s*"' + re.escape(ASSET_URL) + r'(?:\?v\d+)?"'
 		new = re.sub(pattern, want, src)
 
 		if new == src:
-			notes.append(f"{app}: app_logo_url already correct")
+			notes.append(f"{app}: app_logo_url already {VERSIONED_URL}")
 		else:
 			with open(path, "w") as f:
 				f.write(new)
-			notes.append(f"{app}: app_logo_url re-asserted -> {ASSET_URL}")
+			notes.append(f"{app}: app_logo_url re-asserted -> {VERSIONED_URL}")
 
 	# 2. make sure the served copy exists and is the prism, not the wordmark
 	#    (a stale volume can still hold the old 160x48 text wordmark)
