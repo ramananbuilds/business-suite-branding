@@ -69,9 +69,10 @@ import frappe
 
 STUDIO_LITE_LOGO = "/assets/business_suite_branding/images/logo.svg"
 
-# The wordmark is used in the header / favicon / page title only. It is
-# deliberately NOT used on launcher tiles: the asset is 160x48, so a tile
-# renders it as a small black bar inside a square. Tiles use lucide icons.
+# Square 28x28 tile artwork shipped in this app's public/images. The wordmark is
+# 160x48 and renders as a small black bar inside a square tile, so it is used for
+# the header / favicon / page title only, never for a launcher tile.
+TILE_ASSET_BASE = "/assets/business_suite_branding/images"
 
 # ---------------------------------------------------------------------------
 # Renames. Keyed by row NAME, which is never changed, so children that point
@@ -235,37 +236,62 @@ def execute():
 		)
 		notes.append(f"retargeted children of {name!r} to parent_icon={row.label!r}")
 
-	# --- pass 3: logos ------------------------------------------------------
-	# The launcher renders a tile's `logo_url` if set, otherwise it falls back to
-	# the `icon` field (a lucide icon name) coloured by `bg_color`. The app tiles
-	# originally used lucide icons -- Framework rendered a grey cube, HR a green
-	# person, ERPNext Settings a blue gear -- and putting the Studio Lite wordmark in
-	# logo_url replaced all of that with a small black bar, because the wordmark is
-	# a 160x48 wide asset squeezed into a square tile.
+	# --- pass 3: tile artwork ----------------------------------------------
+	# `desktop_icon.html` picks the tile art in this order:
+	#   1. frappe.utils.get_desktop_icon(label, style)
+	#      -> assets/{app}/icons/desktop_icons/{style}/{scrub(label)}.svg
+	#   2. logo_url || icon_image
+	#   3. icon_type == "Folder"
+	#   4. else frappe.utils.desktop_icon(label, bg_color)   <- LETTER fallback
 	#
-	# So: clear logo_url on the app tiles and restore their real lucide icons.
-	# `Studio Lite` branding still lives in the header, favicon and page title, which
-	# is where a wordmark belongs.
-	APP_TILE_ICONS = {
-		# name            icon (lucide)     bg_color
-		"Framework": ("box", "gray"),
-		"Frappe HR": ("user-round", "green"),
-		"ERPNext": ("settings", "blue"),
-		"ERPNext Settings": ("settings", "blue"),
-		"Studio Lite CRM": ("users", "blue"),
+	# The `icon` field is NOT consulted for the artwork. It is only metadata, so
+	# setting icon="box" / "user-round" and clearing logo_url falls through to
+	# branch 4 and renders a big letter (C / F / H) instead of a pictogram.
+	# That is why the app tiles showed letters after the wordmark was removed.
+	#
+	# So the tiles get real square SVGs shipped in this app's public/images,
+	# matching the geometry of the upstream erpnext "solid" tiles: 28x28 viewBox,
+	# a rounded background square, and a white glyph on top. The Studio Lite
+	# wordmark is deliberately NOT used here -- it is 160x48 and renders as a
+	# small black bar inside a square tile. It stays in the header and favicon.
+	APP_TILE_ART = {
+		"Framework": f"{TILE_ASSET_BASE}/tile-framework.svg",
+		"Frappe HR": f"{TILE_ASSET_BASE}/tile-hr.svg",
+		"Studio Lite CRM": f"{TILE_ASSET_BASE}/tile-crm.svg",
+		"ERPNext Settings": f"{TILE_ASSET_BASE}/tile-settings.svg",
+		"ERPNext": f"{TILE_ASSET_BASE}/tile-settings.svg",
 	}
 
-	for name, (icon, bg) in APP_TILE_ICONS.items():
+	for name, art in APP_TILE_ART.items():
 		if not frappe.db.exists("Desktop Icon", name):
-			notes.append(f"skip icon fix: no Desktop Icon named {name!r}")
+			notes.append(f"skip artwork: no Desktop Icon named {name!r}")
 			continue
+		row = frappe.db.get_value("Desktop Icon", name, ["logo_url", "icon"], as_dict=True)
 		frappe.db.set_value(
 			"Desktop Icon",
 			name,
-			{"logo_url": None, "icon": icon, "bg_color": bg},
+			{"logo_url": art, "icon": None, "bg_color": None},
 			update_modified=False,
 		)
-	notes.append("app tile wordmarks removed; lucide icons restored")
+		notes.append(
+			f"{name!r}: artwork -> {art}"
+			if row.logo_url != art
+			else f"{name!r}: artwork already set"
+		)
+
+	# --- pass 3b: scrub the wordmark from every remaining row -------------
+	# The wordmark is a 160x48 banner. In a square tile it renders as a small
+	# black bar, and it must never be used as tile artwork. Hidden rows
+	# (module shortcuts, the flattened ERPNext parent) can still be carrying it
+	# from an earlier run of this patch, so clear it everywhere rather than only
+	# on the tiles this patch happens to know about.
+	scrubbed = frappe.db.sql(
+		"update `tabDesktop Icon` set logo_url = null"
+		" where logo_url = %s",
+		(STUDIO_LITE_LOGO,),
+	)
+	if scrubbed:
+		notes.append(f"cleared the 160x48 wordmark from {scrubbed} row(s)")
 
 	# --- pass 4: make every app / top-level tile actually open -----------------
 	# `desktop.js::get_route()` reads the `link` field, and for Workspace Sidebar
