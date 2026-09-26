@@ -1,0 +1,117 @@
+{
+ "app": "business_suite_branding",
+ "doctype": "Workspace Sidebar",
+ "items": [
+  {
+   "is_section_break": 0,
+   "label": "Global Defaults",
+   "link_to": "Global Defaults",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "System Settings",
+   "link_to": "System Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Accounts Settings",
+   "link_to": "Accounts Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "POS Settings",
+   "link_to": "POS Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Selling Settings",
+   "link_to": "Selling Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Buying Settings",
+   "link_to": "Buying Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Stock Settings",
+   "link_to": "Stock Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Manufacturing Settings",
+   "link_to": "Manufacturing Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Projects Settings",
+   "link_to": "Projects Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "CRM Settings",
+   "link_to": "CRM Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Support Settings",
+   "link_to": "Support Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 1,
+   "label": "Other Settings",
+   "link_to": null,
+   "type": "Section Break"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Subscription Settings",
+   "link_to": "Subscription Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Item Variant Settings",
+   "link_to": "Item Variant Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Delivery Settings",
+   "link_to": "Delivery Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Currency Exchange Settings",
+   "link_to": "Currency Exchange Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Appointment Booking Settings",
+   "link_to": "Appointment Booking Settings",
+   "type": "Link"
+  },
+  {
+   "is_section_break": 0,
+   "label": "Stock Reposting Settings",
+   "link_to": "Stock Reposting Settings",
+   "type": "Link"
+  }
+ ],
+ "name": "ERP Settings",
+ "standard": 1,
+ "title": "ERP Settings"
+}
