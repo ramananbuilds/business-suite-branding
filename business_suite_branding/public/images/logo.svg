@@ -1,12 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48">
-  <rect width="160" height="48" rx="10" fill="#111111"/>
-  <text x="80"
-        y="31"
-        text-anchor="middle"
-        font-family="Arial, Helvetica, sans-serif"
-        font-size="20"
-        font-weight="700"
-        fill="#ffffff">
-    Studio Lite
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 205 380" width="205" height="380" role="img" aria-label="Studio Lite">
+  <title>Studio Lite</title>
+  <!-- Four-facet prism, traced from the source raster.
+       viewBox is cropped to the mark itself (x 60..265 of the 320px source) so
+       there is NO background rectangle: the shape has to sit on the dark
+       navbar button without a black box around it.
+
+       Silhouette:  (77,15.5) -> (248,96) -> (248,383) -> (77,304.7)
+       navy|slate   y = -0.53432x + 276.79
+       slate|teal   y = -0.94208x + 380.44
+       teal|dkteal  y = +1.06331x +  65.60
+       Facet colours are the raster's own dominant pixel values. -->
+  <polygon points="77,15.5 248,96 248,144.3 77,235.6" fill="#051F38"/>
+  <polygon points="77,235.6 248,144.3 248,146.8 77,307.9" fill="#36505D"/>
+  <polygon points="77,307.9 248,146.8 248,329.3" fill="#027C87"/>
+  <polygon points="77,307.9 77,304.7 248,383 248,329.3" fill="#11525B"/>
 </svg>
