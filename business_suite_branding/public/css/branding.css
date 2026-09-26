@@ -5,20 +5,23 @@
 .studio-lite-brand {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 8px;
+	padding: 8px 18px;
+	border-radius: 12px;
+	background: #19191c;
 	text-decoration: none;
 	color: inherit;
+	line-height: 1;
 }
 
 .studio-lite-logo {
-	width: 28px;
-	height: 28px;
+	width: 30px;
+	height: 44px;
 	object-fit: contain;
+	object-position: center;
 }
 
-.studio-lite-brand span {
-	font-weight: 600;
-}
 
 .header-logo img {
 	object-fit: contain;

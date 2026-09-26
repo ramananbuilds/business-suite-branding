@@ -7,22 +7,22 @@
 		apps: {
 			frappe: {
 				title: "Studio Lite",
-				logo: "/assets/business_suite_branding/images/logo.svg",
+				logo: "/assets/business_suite_branding/images/logo.svg?v2",
 			},
 
 			erpnext: {
 				title: "Studio Lite ERP",
-				logo: "/assets/business_suite_branding/images/logo.svg",
+				logo: "/assets/business_suite_branding/images/logo.svg?v2",
 			},
 
 			crm: {
 				title: "Studio Lite CRM",
-				logo: "/assets/business_suite_branding/images/logo.svg",
+				logo: "/assets/business_suite_branding/images/logo.svg?v2",
 			},
 
 			hrms: {
 				title: "Studio Lite HR",
-				logo: "/assets/business_suite_branding/images/logo.svg",
+				logo: "/assets/business_suite_branding/images/logo.svg?v2",
 			},
 		},
 	};
