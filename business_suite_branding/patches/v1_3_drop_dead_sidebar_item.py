@@ -68,11 +68,14 @@ def _drop_from_db():
 		print("  live sidebar: already clean (%d items)" % len(sb.items))
 		return
 
-	# remove by child-row name; the label is not unique enough to trust here
-	for name in kill:
-		sb.remove(name)
+	# Document.remove() takes the child Document, not its name -- passing a
+	# string raises AttributeError on parentfield. Rebuild the list instead,
+	# which is unambiguous and avoids relying on that signature.
+	before = len(sb.items)
+	sb.items = [r for r in sb.items if r.label not in DEAD_LABELS]
 	sb.save()
-	print("  live sidebar: removed %d row(s) %s" % (len(kill), ", ".join(kill)))
+	removed = before - len(sb.items)
+	print("  live sidebar: removed %d row(s) %s" % (removed, ", ".join(kill)))
 
 
 def _verify():
