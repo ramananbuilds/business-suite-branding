@@ -274,7 +274,7 @@ app_include_css = [
 
 brand_html = """
 <a href="/" class="studio-lite-brand" title="Studio Lite" aria-label="Studio Lite">
-	<img src="/assets/business_suite_branding/images/logo.svg?v2"
+	<img src="/assets/business_suite_branding/images/logo.svg?v3"
 		 alt="Studio Lite"
 		 class="studio-lite-logo">
 </a>

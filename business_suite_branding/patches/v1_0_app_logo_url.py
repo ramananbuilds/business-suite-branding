@@ -48,8 +48,17 @@ VERSION = 3
 VERSIONED_URL = f"{ASSET_URL}?v{VERSION}"
 
 def _patch_app_logo_url(src: str) -> tuple[str, int]:
-	"""Point app_logo_url at the versioned URL, wherever it is declared."""
-	pattern = r'app_logo_url\s*=\s*"' + re.escape(ASSET_URL) + r'(?:\?v\d+)?"'
+	"""Point app_logo_url at the versioned URL, wherever it is declared.
+
+	The version suffix is matched as one-or-more so that a URL which has
+	already been concatenated more than once (?v3?v2, ?v2?v2?v2) collapses to a
+	single version instead of being left in place.
+	"""
+	pattern = (
+		r'app_logo_url\s*=\s*"'
+		+ re.escape(ASSET_URL)
+		+ r'(?:\?v?\d*)*"'
+	)
 	want = f'app_logo_url = "{VERSIONED_URL}"'
 	return re.sub(pattern, want, src), len(re.findall(pattern, src))
 
@@ -69,8 +78,41 @@ def _patch_add_to_apps_screen(src: str) -> tuple[str, int]:
 	frappe/hooks.py was already versioned, which is why the Desk navbar and the
 	frappe entry in the switcher were right while erpnext, hrms and crm stayed
 	stale.
+
+	The whole `logo` value is replaced, including any existing ?vN. Capturing
+	the old version and re-appending it would concatenate two of them --
+	?v3?v2 -- because VERSIONED_URL already carries the new version. The regex
+	below therefore matches the trailing version(s) as part of the match and
+	discards them, rather than capturing one for reuse. Matching one-or-more
+	also repairs a URL that is already doubled, so the patch is self-healing.
 	"""
-	pattern = r'("logo"\s*:\s*")' + re.escape(ASSET_URL) + r'((?:\?v\d+)?")'
+	pattern = (
+		r'("logo"\s*:\s*")'
+		+ re.escape(ASSET_URL)
+		+ r'(?:\?v?\d*)*(")'
+	)
+	return re.sub(pattern, r"\g<1>" + VERSIONED_URL + r"\g<2>", src), len(
+		re.findall(pattern, src)
+	)
+
+
+def _patch_brand_html(src: str) -> tuple[str, int]:
+	"""Version the asset inside brand_html, the WEBSITE navbar render path.
+
+	brand_html is a separate path from the Desk navbar and is not covered by
+	app_logo_url at all. Frappe renders it on /login, /app and any website
+	page, so without this the website navbar keeps whatever version was
+	hand-written into the branding app's hooks.py.
+
+	Matches a plain src="<asset>" attribute, so it cannot touch
+	splash_image, email_brand_image or any other reference that is a
+	deliberate unversioned path.
+	"""
+	pattern = (
+		r'(src\s*=\s*")'
+		+ re.escape(ASSET_URL)
+		+ r'(?:\?v?\d*)*(")'
+	)
 	return re.sub(pattern, r"\g<1>" + VERSIONED_URL + r"\g<2>", src), len(
 		re.findall(pattern, src)
 	)
@@ -80,6 +122,7 @@ def _patch_add_to_apps_screen(src: str) -> tuple[str, int]:
 HOOK_PATCHERS = (
 	("app_logo_url", _patch_app_logo_url),
 	("add_to_apps_screen", _patch_add_to_apps_screen),
+	("brand_html", _patch_brand_html),
 )
 
 
@@ -129,10 +172,10 @@ def execute():
 			continue
 		with open(path) as f:
 			body = f.read()
-		for m in re.finditer(re.escape(ASSET_URL) + r'(?:\?v(\d+))?', body):
-			if not m.group(1):
+		for m in re.finditer(re.escape(ASSET_URL) + r'(?:\?v?\d*)+', body):
+			if m.group(0) != VERSIONED_URL:
 				line = body[: m.start()].count("\n") + 1
-				stale.append(f"{app}/hooks.py:{line}")
+				stale.append(f"{app}/hooks.py:{line} {m.group(0)}")
 	if stale:
 		notes.append(f"WARNING unversioned asset URL still present at: {', '.join(stale)}")
 
