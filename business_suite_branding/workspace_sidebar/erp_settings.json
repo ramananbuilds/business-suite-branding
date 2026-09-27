@@ -80,13 +80,6 @@
    "type": "Link"
   },
   {
-   "is_section_break": 1,
-   "label": "Other Settings",
-   "link_to": null,
-   "link_type": null,
-   "type": "Section Break"
-  },
-  {
    "is_section_break": 0,
    "label": "Subscription Settings",
    "link_to": "Subscription Settings",
