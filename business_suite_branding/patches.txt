@@ -5,3 +5,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 business_suite_branding.patches.v1_0_app_logo_url
 business_suite_branding.patches.v1_1_restore_erp_settings_sidebar
+business_suite_branding.patches.v1_2_reassert_logos
