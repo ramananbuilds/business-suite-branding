@@ -281,7 +281,8 @@ brand_html = """
 """
 
 website_context = {
-	"favicon": "/assets/business_suite_branding/images/favicon.svg",
+	"favicon": "/assets/business_suite_branding/images/favicon.svg?v4",
+	"favicon_small": "/assets/business_suite_branding/images/favicon-16.svg?v4",
 }
 
 default_mail_footer = """
