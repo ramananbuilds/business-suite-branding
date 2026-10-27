@@ -1,0 +1,73 @@
+{
+ "doctype": "Sidebar",
+ "name": "Share Management",
+ "title": "Share Management",
+ "app": "business_suite_branding",
+ "standard": 1,
+ "items": [
+  {
+   "doctype": "Sidebar Item",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
+   "idx": 1,
+   "type": "Link",
+   "label": "Shareholder",
+   "link_type": "DocType",
+   "link_to": "Shareholder",
+   "icon": "customer",
+   "child": 1,
+   "indent": 0,
+   "collapsible": "1",
+   "keep_closed": "0",
+   "show_arrow": "0"
+  },
+  {
+   "doctype": "Sidebar Item",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
+   "idx": 2,
+   "type": "Link",
+   "label": "Share Transfer",
+   "link_type": "DocType",
+   "link_to": "Share Transfer",
+   "icon": "move-horizontal",
+   "child": 1,
+   "indent": 0,
+   "collapsible": "1",
+   "keep_closed": "0",
+   "show_arrow": "0"
+  },
+  {
+   "doctype": "Sidebar Item",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
+   "idx": 3,
+   "type": "Link",
+   "label": "Share Ledger",
+   "link_type": "Report",
+   "link_to": "Share Ledger",
+   "icon": "list",
+   "child": 1,
+   "indent": 0,
+   "collapsible": "1",
+   "keep_closed": "0",
+   "show_arrow": "0"
+  },
+  {
+   "doctype": "Sidebar Item",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
+   "idx": 4,
+   "type": "Link",
+   "label": "Share Balance",
+   "link_type": "Report",
+   "link_to": "Share Balance",
+   "icon": "notepad-text",
+   "child": 1,
+   "indent": 0,
+   "collapsible": "1",
+   "keep_closed": "0",
+   "show_arrow": "0"
+  }
+ ]
+}
