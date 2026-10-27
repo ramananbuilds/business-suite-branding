@@ -56,17 +56,19 @@ import re
 import frappe
 
 APP = "business_suite_branding"
-AREAS = [
-	"Accounts Setup",
-	"Banking",
-	"Budget",
-	"ERP Settings",
-	"Organization",
-	"Payments",
-	"Share Management",
-	"Subscription",
-	"Taxes",
-]
+AREAS = {
+	# area -> the module it belongs to. The boot walk is module-keyed, so an
+	# app-rooted sidebar with no module never joins the shell set.
+	"Accounts Setup": "Accounts",
+	"Banking": "Accounts",
+	"Budget": "Accounts",
+	"ERP Settings": "Setup",
+	"Organization": "Setup",
+	"Payments": "Accounts",
+	"Share Management": "Accounts",
+	"Subscription": "Accounts",
+	"Taxes": "Accounts",
+}
 SIDEBAR_ITEM_FIELDS = (
 	"type",
 	"label",
@@ -152,8 +154,17 @@ def _ensure_fixture(area: str) -> str:
 	return f"written from the legacy Workspace Sidebar ({len(rows)} items)"
 
 
-def _ensure_record(area: str) -> str:
+def _ensure_record(area: str, module: str) -> str:
 	if frappe.db.exists("Sidebar", area):
+		row = frappe.db.get_value("Sidebar", area, ["module", "app", "standard"], as_dict=True)
+		if row.module != module:
+			# placed in the module walk (get_navigable_modules orders shells by their
+			# module); app-rooted exports still win via record_app, so the file stays
+			# in this app. db.set_value, not save(): a re-validate would re-export
+			# from wherever the site's own state was, and there is nothing else to
+			# change.
+			frappe.db.set_value("Sidebar", area, "module", module, update_modified=False)
+			return f"already present, module set to {module!r}"
 		return "already present"
 
 	path = _fixture_path(area)
@@ -209,9 +220,9 @@ def _clear_caches() -> None:
 
 def execute():
 	notes = []
-	for area in AREAS:
+	for area, module in AREAS.items():
 		notes.append(f"{area!r} fixture: {_ensure_fixture(area)}")
-		notes.append(f"{area!r} sidebar: {_ensure_record(area)}")
+		notes.append(f"{area!r} sidebar: {_ensure_record(area, module)}")
 
 	# what the launcher will now resolve: every area must be a key of the payload
 	payload = frappe.boot.get_module_sidebars()

@@ -235,5 +235,6 @@
    "keep_closed": "0",
    "show_arrow": "0"
   }
- ]
+ ],
+ "module": "Accounts"
 }
