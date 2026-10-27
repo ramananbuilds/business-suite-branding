@@ -162,6 +162,23 @@ def _ensure_record(area: str) -> str:
 	with open(path, encoding="utf-8") as f:
 		doc = json.load(f)
 
+	# LinkValidation aborts the whole insert when a link names something this
+	# site does not have (v1_1 filtered the same way; this site's item was
+	# "Repost Accounting Ledger Settings"). The row comes back from the fixture
+	# if the target is ever installed. A Link row with NO target at all is the
+	# v1_3 crash class and is dropped rather than inserted.
+	def _target_missing(item: dict) -> bool:
+		kind, target = item.get("link_type"), item.get("link_to")
+		if not kind or not target:
+			return item.get("type") == "Link"
+		if kind not in ("DocType", "Report", "Workspace", "Dashboard", "Page"):
+			return False
+		return not frappe.db.exists(kind, target, cache=True)
+
+	before = len(doc.get("items") or [])
+	doc["items"] = [i for i in (doc.get("items") or []) if not _target_missing(i)]
+	dropped = before - len(doc["items"])
+
 	# validate_standard() demands developer mode to flip `standard` on and
 	# validate_app_content() allows app-owned edits only under its SYSTEM_WRITE_FLAGS;
 	# honour both for the insert, then restore the site's own values.
@@ -175,7 +192,7 @@ def _ensure_record(area: str) -> str:
 		frappe.conf.developer_mode = patch_mode
 		frappe.flags.in_patch = False
 
-	return f"created ({len(doc.get('items') or [])} items)"
+	return f"created ({len(doc['items'])} items" + (f", {dropped} link target(s) not on this site dropped" if dropped else "") + ")"
 
 
 def _clear_caches() -> None:

@@ -364,21 +364,6 @@
    "collapsible": "1",
    "keep_closed": "0",
    "show_arrow": "0"
-  },
-  {
-   "doctype": "Sidebar Item",
-   "parentfield": "items",
-   "parenttype": "Sidebar",
-   "idx": 25,
-   "type": "Link",
-   "label": "Repost Accounting Ledger Settings",
-   "link_type": "DocType",
-   "link_to": "Repost Accounting Ledger Settings",
-   "child": 1,
-   "indent": 0,
-   "collapsible": "1",
-   "keep_closed": "0",
-   "show_arrow": "0"
   }
  ]
 }
