@@ -382,7 +382,7 @@ def execute():
 	#    the sidebar. This is why pass 0 restores the label instead.
 	APP_TILE_LINKS = {
 		"Framework": "/desk/build",
-		"Frappe HR": "/desk/people",
+		"Frappe HR": "/desk/hr-setup",
 		# The real CRM app. crm/hooks.py registers:
 		#     {"from_route": "/crm/<path:app_path>", "to_route": "crm"}
 		# so the Vue SPA is served from /crm (title "Studio Lite CRM", bundles
