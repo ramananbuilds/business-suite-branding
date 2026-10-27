@@ -264,6 +264,10 @@ app_license = "mit"
 
 extend_bootinfo = "business_suite_branding.boot.extend_bootinfo"
 
+# The launcher repairs must survive every migrate: upstream fixture sync
+# re-creates the rows fixes.py prunes. See fixes.py.
+after_migrate = ["business_suite_branding.fixes.after_migrate"]
+
 app_include_js = [
 	"/assets/business_suite_branding/js/branding.js",
 ]
